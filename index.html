@@ -41,97 +41,115 @@
 
             return currDate.getTime();
         }
+        const _hashstr = s => {
+            let hash = 0;
+            if (s.length == 0) return hash;
+            for (let i = 0; i < s.length; i++) {
+                let char = s.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32bit integer
+            }
+            return hash;
+        }
 
-        (async function() {
-            const cache = (config, url, method = 'get', params = {}) => {
-                if(! _.has(config, 'mode') || ! ['block', 'allow'].includes(config.mode)) throw new Error('accepted modes: block | allow');
-                if(! _.has(config, 'matchIn') && ! _.has(config, 'endsWith')) throw new Error('malformed config');
+        const cacheManager = (config, key, url, overrideCachemode = null) => {
+            if(! _.has(config, 'mode') || ! ['block', 'allow'].includes(config.mode)) throw new Error('accepted modes: block | allow');
+            if(! _.has(config, 'matchIn') && ! _.has(config, 'endsWith')) throw new Error('malformed config');
 
-                storage = window.localStorage;
+            storage = window.localStorage;
+            const cacheKey = _hashstr(`${key}:${url}`);
 
-                return {
-                    should: () => {
-                        let allowed = false;
+            return {
+                should: function() {
+                    if(overrideCachemode !== null) return overrideCachemode;
 
-                        if(config.mode === 'block') {
-                            allowed = true;
+                    let allowed = false;
 
-                            if(_.has(config, 'matchIn')) {
-                                if(config.matchIn.includes(url)) allowed = false;
-                            }
+                    if(config.mode === 'block') {
+                        allowed = true;
 
-                            if(_.has(config, 'endsWith')) {
-                                config.endsWith.forEach(partial => {
-                                    if(_.endsWith(url, partial)) allowed = false;
-                                });
-                            }
-                        }
-                        else {
-                            allowed = false;
-
-                            if(_.has(config, 'matchIn')) {
-                                if(config.matchIn.includes(url)) allowed = true;
-                            }
-
-                            if(_.has(config, 'endsWith')) {
-                                config.endsWith.forEach(partial => {
-                                    if(_.endsWith(url, partial)) allowed = true;
-                                });
-                            }
+                        if(_.has(config, 'matchIn')) {
+                            if(config.matchIn.includes(url)) allowed = false;
                         }
 
-                        return allowed;
-                    },
-                    has: (item) => {
-                        if(item === null) return false;
+                        if(_.has(config, 'endsWith')) {
+                            config.endsWith.forEach(partial => {
+                                if(_.endsWith(url, partial)) allowed = false;
+                            });
+                        }
+                    }
+                    else {
+                        allowed = false;
 
-                        const payload = JSON.parse(item);
+                        if(_.has(config, 'matchIn')) {
+                            if(config.matchIn.includes(url)) allowed = true;
+                        }
 
-                        if(payload.method !== method.toLowerCase()) return false;
+                        if(_.has(config, 'endsWith')) {
+                            config.endsWith.forEach(partial => {
+                                if(_.endsWith(url, partial)) allowed = true;
+                            });
+                        }
+                    }
 
-                        if(! _.isEqual(payload.params, params)) return false;
+                    return allowed;
+                },
+                has: function(item) {
+                    if(item === null) return false;
 
-                        return ! _hasTTLExpired(payload.ttl);
-                    },
-                    store: function(data, ttl) {
-                        console.log('should set', this.should());
+                    const payload = JSON.parse(item);
 
-                        if(! this.should()) return false;
-
+                    if(_hasTTLExpired(payload.ttl)) {
                         this.delete();
 
-                        storage.setItem(url, JSON.stringify(Object.assign({
-                            method: method.toLowerCase(),
-                            params,
-                            data,
-                            ttl
-                        })));
-                    },
-                    get: function() {
-                        return storage.getItem(url);
-                    },
-                    select: function() {
-                        const item = this.get();
+                        return false;
+                    }
 
-                        if(! this.has(item)) return false;
+                    return true;
+                },
+                store: function(data, ttlStr = config.defaultTTL) {
+                    console.log('should store', this.should());
 
-                        return JSON.parse(item).data;
-                    },
-                    delete: () => {
-                        storage.removeItem(url);
-                    },
-                    flushAll: () => {
-                        storage.clear();
-                    },
-                }
+                    if(! this.should()) return false;
+
+                    const ttlParts = ttlStr.split(' ');
+                    const ttl = _setTTL(ttlParts[0], ttlParts[1]);
+
+                    storage.setItem(cacheKey, JSON.stringify(Object.assign({
+                        data,
+                        ttl
+                    })));
+
+                    console.log('stored for ', ttlStr);
+                },
+                get: function() {
+                    return storage.getItem(cacheKey);
+                },
+                select: function() {
+                    if(overrideCachemode !== null) {
+                        if(overrideCachemode === false) {
+                            this.delete();
+
+                            return false;
+                        }
+                    }
+
+                    const item = this.get();
+
+                    if(! this.has(item)) return false;
+
+                    return JSON.parse(item).data;
+                },
+                delete: () => {
+                    storage.removeItem(cacheKey);
+                },
+                flushAll: () => {
+                    storage.clear();
+                },
             }
+        }
 
-            const url = 'https://jsonplaceholder.typicode.com/posts';
-            // const params = {foo: 'bar'};
-            const res = {name: 'rav'};
-            const ttl = _setTTL(1, 'minute');
-            const method = 'get';
-
+        function cachedFetch(key, url, options) {
             const config = {
                 mode: 'block',
                 matchIn: [
@@ -140,16 +158,70 @@
                 endsWith: [
                     '?postId=1',
                     // '/posts'
-                ]
+                ],
+                defaultTTL: '5 minute'
             }
 
-            // cache(config, url, 'get').store(res, ttl);
+            let overrideCachemode = null;
+            if(options !== null && _.has(options, 'keep-cache')) {
+                overrideCachemode = options['keep-cache'];
+            }
 
-            // cache(config, url, 'get').flushAll();
+            const cacher = cacheManager(config, key, url, overrideCachemode);
 
-            console.log(
-                cache(config, url).select()
-            );
+            const cachedContent = cacher.select();
+
+            // cached data exists, resturning cached
+            if(cachedContent) {
+                console.log('fetching cached');
+
+                const response = new Response(cachedContent)
+			    return Promise.resolve(response)
+            }
+
+            console.log('no cached content');
+
+            // nothing in cache store, fetch & cache, then response out
+            return fetch(url, options).then(response => {
+                // let's only store in cache if the content-type is 
+                // JSON or something non-binary
+                if (response.status >= 200 && response.status < 300) {
+                    let ct = response.headers.get('Content-Type')
+                    if (ct && (ct.match(/application\/json/i) || ct.match(/text\//i))) {
+                        // There is a .json() instead of .text() but 
+                        // we're going to store it in sessionStorage as 
+                        // string anyway.
+                        // If we don't clone the response, it will be 
+                        // consumed by the time it's returned. This 
+                        // way we're being un-intrusive. 
+                        response.clone().text().then(content => {
+                            let ttl = _.has(options, 'cacheTTL') ? options.cacheTTL : config.defaultTTL;
+
+                            console.log('attempt storing');
+                            cacher.store(content, ttl);
+                        })
+                    }
+                }
+                return response
+            })
+        }
+
+        (function() {
+            // ex - 1
+            cachedFetch('fetch_posts', 'https://jsonplaceholder.typicode.com/posts', {
+                'keep-cache' : false,
+                cacheTTL: '1 minute'
+            })
+            .then(r => r.json())
+            .then(res => console.log('result', res));
+
+            // ex - 2
+            cachedFetch('fetch_posts', 'https://httpbin.org/html', {
+                'keep-cache' : true,
+                cacheTTL: '1 minute'
+            })
+            .then(r => r.text())
+            .then(res => console.log('result', res));
         })();
     </script>
     
