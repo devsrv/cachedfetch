@@ -52,11 +52,75 @@
             return hash;
         }
 
+        const storageBox = (driver = 'localStorage', disk = undefined) => {
+            let storage = window.localStorage;
+
+            switch (driver) {
+                case 'localStorage':
+                    storage = window.localStorage;
+                    return {
+                        get: (key) => storage.getItem(key),
+                        set: (key, val) => storage.setItem(key, val),
+                        remove: (key) => storage.removeItem(key),
+                        clear: () => storage.clear(),
+                    }
+
+                    break;
+            
+                case 'sessionStorage':
+                    storage = window.sessionStorage;
+                    return {
+                        get: (key) => storage.getItem(key),
+                        set: (key, val) => storage.setItem(key, val),
+                        remove: (key) => storage.removeItem(key),
+                        clear: () => storage.clear(),
+                    }
+
+                    break;
+            
+                case 'AsyncStorage':
+                    if (typeof disk === 'undefined') {
+                        throw new Error('required storage instance missing');
+                    }
+
+                    return {
+                        get: async (key) => {
+                            try {
+                                const value = await disk.getItem(key)
+                                return value;
+                            } catch(e) {
+                                throw new Error('error reading value from '+ driver);
+                            }
+                        },
+                        set: (key, val) => disk.setItem(key, val),
+                        remove: async (key) => {
+                            try {
+                                await disk.removeItem(key)
+                            } catch(e) {
+                                throw new Error('error removing data from '+ driver);
+                            }
+                        },
+                        clear: () => disk.clear(),
+                    }
+
+                    break;
+            
+                default:
+                    storage = window.localStorage;
+                    return {
+                        get: (key) => storage.getItem(key),
+                        set: (key, val) => storage.setItem(key, val),
+                        remove: (key) => storage.removeItem(key),
+                        clear: () => storage.clear(),
+                    }
+            }
+        }
+
         const cacheManager = (config, key, url, overrideCachemode = null) => {
             if(! _.has(config, 'mode') || ! ['block', 'allow'].includes(config.mode)) throw new Error('accepted modes: block | allow');
             if(! _.has(config, 'matchIn') && ! _.has(config, 'endsWith')) throw new Error('malformed config');
 
-            storage = window.localStorage;
+            const storage = storageBox(config.driver, config.disk);
             const cacheKey = _hashstr(`${key}:${url}`);
 
             return {
@@ -115,7 +179,7 @@
                     const ttlParts = ttlStr.split(' ');
                     const ttl = _setTTL(ttlParts[0], ttlParts[1]);
 
-                    storage.setItem(cacheKey, JSON.stringify(Object.assign({
+                    storage.set(cacheKey, JSON.stringify(Object.assign({
                         data,
                         ttl
                     })));
@@ -123,7 +187,7 @@
                     console.log('stored for ', ttlStr);
                 },
                 get: function() {
-                    return storage.getItem(cacheKey);
+                    return storage.get(cacheKey);
                 },
                 select: function() {
                     if(overrideCachemode !== null) {
@@ -141,7 +205,7 @@
                     return JSON.parse(item).data;
                 },
                 delete: () => {
-                    storage.removeItem(cacheKey);
+                    storage.remove(cacheKey);
                 },
                 flushAll: () => {
                     storage.clear();
@@ -159,7 +223,9 @@
                     '?postId=1',
                     // '/posts'
                 ],
-                defaultTTL: '5 minute'
+                defaultTTL: '5 minute',
+                driver: 'sessionStorage',
+                disk: undefined
             }
 
             const headers = new Headers();
@@ -220,22 +286,22 @@
 
         (function() {
             // ex - 1
-            /*cachedFetch('fetch_posts', 'https://jsonplaceholder.typicode.com/posts', {
-                'keep-cache' : false,
+            cachedFetch('fetch_posts', 'https://jsonplaceholder.typicode.com/posts', {
+                'keep-cache' : true,
                 cacheTTL: '1 minute'
             })
             .then(r => r.json())
-            .then(res => console.log('result', res));*/
+            .then(res => console.log('result', res));
 
             // ex - post
-            cachedFetch('add_user', 'https://reqres.in/api/users', {
+            /*cachedFetch('add_user', 'https://reqres.in/api/users', {
                 method: 'POST',
                 body: JSON.stringify({name: 'sourav', job: 'engineer'}),
                 'keep-cache' : false,
                 // cacheTTL: '1 minute'
             })
             .then(r => r.json())
-            .then(res => console.log('result', res));
+            .then(res => console.log('result', res));*/
 
             // ex - 2
             /*cachedFetch('fetch_posts', 'https://httpbin.org/html', {
