@@ -213,7 +213,60 @@
             }
         }
 
-        function cachedFetch(key, url, userOptions) {
+        function _initCachedFetch(config, headers) {
+            return function (key, url, userOptions) {
+                let options = {
+                    headers: headers
+                };
+
+                options = Object.assign(options, userOptions);
+
+                let overrideCachemode = null;
+                if(_.has(options, 'keep-cache')) {
+                    overrideCachemode = options['keep-cache'];
+                }
+
+                const cacher = cacheManager(config, key, url, overrideCachemode);
+
+                const cachedContent = cacher.select();
+
+                // cached data exists, resturning cached
+                if(cachedContent) {
+                    console.log('fetching cached');
+
+                    const response = new Response(cachedContent)
+                    return Promise.resolve(response)
+                }
+
+                console.log('no cached content');
+
+                // nothing in cache store, fetch & cache, then response out
+                return fetch(url, options).then(response => {
+                    // let's only store in cache if the content-type is 
+                    // JSON or something non-binary
+                    if (response.status >= 200 && response.status < 300) {
+                        let ct = response.headers.get('Content-Type')
+                        if (ct && (ct.match(/application\/json/i) || ct.match(/text\//i))) {
+                            // There is a .json() instead of .text() but 
+                            // we're going to store it in sessionStorage as 
+                            // string anyway.
+                            // If we don't clone the response, it will be 
+                            // consumed by the time it's returned. This 
+                            // way we're being un-intrusive. 
+                            response.clone().text().then(content => {
+                                let ttl = _.has(options, 'cacheTTL') ? options.cacheTTL : config.defaultTTL;
+
+                                console.log('attempt storing');
+                                cacher.store(content, ttl);
+                            })
+                        }
+                    }
+                    return response
+                })
+            }
+        }
+
+        (function() {
             const config = {
                 mode: 'block',
                 matchIn: [
@@ -226,7 +279,7 @@
                 defaultTTL: '5 minute',
                 driver: 'sessionStorage',
                 disk: undefined
-            }
+            };
 
             const headers = new Headers();
             headers.append('Accept', 'application/json');
@@ -234,57 +287,8 @@
             headers.append('X-Requested-With', 'XMLHttpRequest');
             // headers.append('X-CSRF-Token', document.querySelector('meta[name="csrf-token"]').content);
 
-            let options = {
-                headers: headers
-            };
+            const cachedFetch = _initCachedFetch(config, headers);
 
-            options = Object.assign(options, userOptions);
-
-            let overrideCachemode = null;
-            if(_.has(options, 'keep-cache')) {
-                overrideCachemode = options['keep-cache'];
-            }
-
-            const cacher = cacheManager(config, key, url, overrideCachemode);
-
-            const cachedContent = cacher.select();
-
-            // cached data exists, resturning cached
-            if(cachedContent) {
-                console.log('fetching cached');
-
-                const response = new Response(cachedContent)
-			    return Promise.resolve(response)
-            }
-
-            console.log('no cached content');
-
-            // nothing in cache store, fetch & cache, then response out
-            return fetch(url, options).then(response => {
-                // let's only store in cache if the content-type is 
-                // JSON or something non-binary
-                if (response.status >= 200 && response.status < 300) {
-                    let ct = response.headers.get('Content-Type')
-                    if (ct && (ct.match(/application\/json/i) || ct.match(/text\//i))) {
-                        // There is a .json() instead of .text() but 
-                        // we're going to store it in sessionStorage as 
-                        // string anyway.
-                        // If we don't clone the response, it will be 
-                        // consumed by the time it's returned. This 
-                        // way we're being un-intrusive. 
-                        response.clone().text().then(content => {
-                            let ttl = _.has(options, 'cacheTTL') ? options.cacheTTL : config.defaultTTL;
-
-                            console.log('attempt storing');
-                            cacher.store(content, ttl);
-                        })
-                    }
-                }
-                return response
-            })
-        }
-
-        (function() {
             // ex - 1
             cachedFetch('fetch_posts', 'https://jsonplaceholder.typicode.com/posts', {
                 'keep-cache' : true,
