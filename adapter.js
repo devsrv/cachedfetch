@@ -6,10 +6,10 @@ function _hasTTLExpired(ttl) {
     return currDate.getTime() > Number(ttl);
 }
 function _setTTL(no, period = 'minute') {
-    const supportedPeriods = ['hour', 'minute', 'second'];
+    const supportedPeriods = ['day', 'hour', 'minute', 'second'];
 
     if(! supportedPeriods.includes(period)) {
-        throw new Error('period not supported, use any of hour/ minute/ second');
+        throw new Error('period not supported, use any of day /hour/ minute/ second');
     }
 
     const till = Number(no);
@@ -17,15 +17,19 @@ function _setTTL(no, period = 'minute') {
     const currDate = new Date();
 
     switch (period) {
+        case 'day':
+            currDate.setHours(currDate.getHours() + (till * 24));
+            break;
+    
         case 'hour':
             currDate.setHours(currDate.getHours() + till);
             break;
-
+    
         case 'minute':
             currDate.setMinutes(currDate.getMinutes() + till);
-
+            
             break;
-
+    
         default:
             currDate.setSeconds(currDate.getSeconds() + till);
             break;
