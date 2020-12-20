@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.20/lodash.min.js"></script>
+    <script>
+        function _hasTTLExpired(ttl) {
+            const currDate = new Date();
+
+            return currDate.getTime() > Number(ttl);
+        }
+        function _setTTL(no, period = 'minute') {
+            const supportedPeriods = ['hour', 'minute', 'second'];
+
+            if(! supportedPeriods.includes(period)) {
+                throw new Error('period not supported, use any of hour/ minute/ second');
+            }
+
+            const till = Number(no);
+
+            const currDate = new Date();
+
+            switch (period) {
+                case 'hour':
+                    currDate.setHours(currDate.getHours() + till);
+                    break;
+            
+                case 'minute':
+                    currDate.setMinutes(currDate.getMinutes() + till);
+                    
+                    break;
+            
+                default:
+                    currDate.setSeconds(currDate.getSeconds() + till);
+                    break;
+            }
+
+            return currDate.getTime();
+        }
+
+        (async function() {
+            const cache = (config, url, method = 'get', params = {}) => {
+                if(! _.has(config, 'mode') || ! ['block', 'allow'].includes(config.mode)) throw new Error('accepted modes: block | allow');
+                if(! _.has(config, 'matchIn') && ! _.has(config, 'endsWith')) throw new Error('malformed config');
+
+                storage = window.localStorage;
+
+                return {
+                    should: () => {
+                        let allowed = false;
+
+                        if(config.mode === 'block') {
+                            allowed = true;
+
+                            if(_.has(config, 'matchIn')) {
+                                if(config.matchIn.includes(url)) allowed = false;
+                            }
+
+                            if(_.has(config, 'endsWith')) {
+                                config.endsWith.forEach(partial => {
+                                    if(_.endsWith(url, partial)) allowed = false;
+                                });
+                            }
+                        }
+                        else {
+                            allowed = false;
+
+                            if(_.has(config, 'matchIn')) {
+                                if(config.matchIn.includes(url)) allowed = true;
+                            }
+
+                            if(_.has(config, 'endsWith')) {
+                                config.endsWith.forEach(partial => {
+                                    if(_.endsWith(url, partial)) allowed = true;
+                                });
+                            }
+                        }
+
+                        return allowed;
+                    },
+                    has: (item) => {
+                        if(item === null) return false;
+
+                        const payload = JSON.parse(item);
+
+                        if(payload.method !== method.toLowerCase()) return false;
+
+                        if(! _.isEqual(payload.params, params)) return false;
+
+                        return ! _hasTTLExpired(payload.ttl);
+                    },
+                    store: function(data, ttl) {
+                        console.log('should set', this.should());
+
+                        if(! this.should()) return false;
+
+                        this.delete();
+
+                        storage.setItem(url, JSON.stringify(Object.assign({
+                            method: method.toLowerCase(),
+                            params,
+                            data,
+                            ttl
+                        })));
+                    },
+                    get: function() {
+                        return storage.getItem(url);
+                    },
+                    select: function() {
+                        const item = this.get();
+
+                        if(! this.has(item)) return false;
+
+                        return JSON.parse(item).data;
+                    },
+                    delete: () => {
+                        storage.removeItem(url);
+                    },
+                    flushAll: () => {
+                        storage.clear();
+                    },
+                }
+            }
+
+            const url = 'https://jsonplaceholder.typicode.com/posts';
+            // const params = {foo: 'bar'};
+            const res = {name: 'rav'};
+            const ttl = _setTTL(1, 'minute');
+            const method = 'get';
+
+            const config = {
+                mode: 'block',
+                matchIn: [
+                    'https://jsonplaceholder.typicode.com/posts/1'
+                ],
+                endsWith: [
+                    '?postId=1',
+                    // '/posts'
+                ]
+            }
+
+            // cache(config, url, 'get').store(res, ttl);
+
+            // cache(config, url, 'get').flushAll();
+
+            console.log(
+                cache(config, url).select()
+            );
+        })();
+    </script>
+    
+</body>
+</html>
