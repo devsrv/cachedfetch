@@ -1,4 +1,5 @@
-import { endsWith, has } from 'lodash';
+const _has = Object.prototype.hasOwnProperty;
+const hasProperty = (obj, prop) => _has.call(obj, prop);
 
 function _hasTTLExpired(ttl) {
     const currDate = new Date();
@@ -113,8 +114,8 @@ const storageBox = (driver = 'localStorage', disk = undefined) => {
 }
 
 const cacheManager = (config, key, url, overrideCachemode = null) => {
-    if(! has(config, 'mode') || ! ['block', 'allow'].includes(config.mode)) throw new Error('accepted modes: block | allow');
-    if(! has(config, 'matchIn') && ! has(config, 'endsWith')) throw new Error('malformed config');
+    if(! hasProperty(config, 'mode') || ! ['block', 'allow'].includes(config.mode)) throw new Error('accepted modes: block | allow');
+    if(! hasProperty(config, 'matchIn') && ! hasProperty(config, 'endsWith')) throw new Error('malformed config');
 
     const storage = storageBox(config.driver, config.disk);
     const cacheKey = _hashstr(`${key}:${url}`);
@@ -128,26 +129,26 @@ const cacheManager = (config, key, url, overrideCachemode = null) => {
             if(config.mode === 'block') {
                 allowed = true;
 
-                if(has(config, 'matchIn')) {
+                if(hasProperty(config, 'matchIn')) {
                     if(config.matchIn.includes(url)) allowed = false;
                 }
 
-                if(has(config, 'endsWith')) {
+                if(hasProperty(config, 'endsWith')) {
                     config.endsWith.forEach(partial => {
-                        if(endsWith(url, partial)) allowed = false;
+                        if(url.endsWith(partial)) allowed = false;
                     });
                 }
             }
             else {
                 allowed = false;
 
-                if(has(config, 'matchIn')) {
+                if(hasProperty(config, 'matchIn')) {
                     if(config.matchIn.includes(url)) allowed = true;
                 }
 
-                if(has(config, 'endsWith')) {
+                if(hasProperty(config, 'endsWith')) {
                     config.endsWith.forEach(partial => {
-                        if(endsWith(url, partial)) allowed = true;
+                        if(url.endsWith(partial)) allowed = true;
                     });
                 }
             }
@@ -218,7 +219,7 @@ export default function _initCachedFetch(config, headers) {
         options = Object.assign(options, userOptions);
 
         let overrideCachemode = null;
-        if(has(options, 'keep-cache')) {
+        if(hasProperty(options, 'keep-cache')) {
             overrideCachemode = options['keep-cache'];
         }
 
@@ -250,7 +251,7 @@ export default function _initCachedFetch(config, headers) {
                     // consumed by the time it's returned. This
                     // way we're being un-intrusive.
                     response.clone().text().then(content => {
-                        let ttl = has(options, 'cacheTTL') ? options.cacheTTL : config.defaultTTL;
+                        let ttl = hasProperty(options, 'cacheTTL') ? options.cacheTTL : config.defaultTTL;
 
                         // console.log('attempt storing');
                         cacher.store(content, ttl);
