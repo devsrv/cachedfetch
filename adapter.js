@@ -56,7 +56,7 @@ const storageBox = (driver = 'localStorage', disk = undefined) => {
         case 'localStorage':
             storage = window.localStorage;
             return {
-                get: (key) => storage.getItem(key),
+                get: async (key) => await storage.getItem(key),
                 set: (key, val) => storage.setItem(key, val),
                 remove: (key) => storage.removeItem(key),
                 clear: () => storage.clear(),
@@ -67,7 +67,7 @@ const storageBox = (driver = 'localStorage', disk = undefined) => {
         case 'sessionStorage':
             storage = window.sessionStorage;
             return {
-                get: (key) => storage.getItem(key),
+                get: async (key) => await storage.getItem(key),
                 set: (key, val) => storage.setItem(key, val),
                 remove: (key) => storage.removeItem(key),
                 clear: () => storage.clear(),
@@ -89,7 +89,14 @@ const storageBox = (driver = 'localStorage', disk = undefined) => {
                         throw new Error('error reading value from '+ driver);
                     }
                 },
-                set: (key, val) => disk.setItem(key, val),
+                set: async (key, val) => {
+                    try {
+                        await disk.setItem(key, val);
+                        return true;
+                    } catch (e) {
+                        throw new Error('saving error '+ driver);
+                    }
+                },
                 remove: async (key) => {
                     try {
                         await disk.removeItem(key)
@@ -105,7 +112,7 @@ const storageBox = (driver = 'localStorage', disk = undefined) => {
         default:
             storage = window.localStorage;
             return {
-                get: (key) => storage.getItem(key),
+                get: async (key) => await storage.getItem(key),
                 set: (key, val) => storage.setItem(key, val),
                 remove: (key) => storage.removeItem(key),
                 clear: () => storage.clear(),
@@ -118,7 +125,7 @@ const cacheManager = (config, key, url, overrideCachemode = null) => {
     if(! hasProperty(config, 'matchIn') && ! hasProperty(config, 'endsWith')) throw new Error('malformed config');
 
     const storage = storageBox(config.driver, config.disk);
-    const cacheKey = _hashstr(`${key}:${url}`);
+    const cacheKey = config.driver === 'AsyncStorage' ? key : _hashstr(`${key}:${url}`);
 
     return {
         should: function() {
@@ -183,10 +190,8 @@ const cacheManager = (config, key, url, overrideCachemode = null) => {
 
             // console.log('stored for ', ttlStr);
         },
-        get: function() {
-            return storage.get(cacheKey);
-        },
-        select: function() {
+        get: async () =>  await storage.get(cacheKey),
+        select: async function() {
             if(overrideCachemode !== null) {
                 if(overrideCachemode === false) {
                     this.delete();
@@ -195,7 +200,7 @@ const cacheManager = (config, key, url, overrideCachemode = null) => {
                 }
             }
 
-            const item = this.get();
+            const item = await this.get();
 
             if(! this.has(item)) return false;
 
@@ -211,7 +216,7 @@ const cacheManager = (config, key, url, overrideCachemode = null) => {
 }
 
 export default function _initCachedFetch(config, headers) {
-    return function (key, url, userOptions) {
+    return async function (key, url, userOptions) {
         let options = {
             headers: headers
         };
@@ -225,7 +230,7 @@ export default function _initCachedFetch(config, headers) {
 
         const cacher = cacheManager(config, key, url, overrideCachemode);
 
-        const cachedContent = cacher.select();
+        const cachedContent = await cacher.select();
 
         // cached data exists, resturning cached
         if(cachedContent) {
