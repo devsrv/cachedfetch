@@ -125,7 +125,7 @@ const cacheManager = (config, key, url, overrideCachemode = null) => {
     if(! hasProperty(config, 'matchIn') && ! hasProperty(config, 'endsWith')) throw new Error('malformed config');
 
     const storage = storageBox(config.driver, config.disk);
-    const cacheKey = config.driver === 'AsyncStorage' ? key : _hashstr(`${key}:${url}`);
+    const cacheKey = _hashstr(`${key}:${url}`).toString();
 
     return {
         should: function() {
