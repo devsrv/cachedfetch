@@ -11,7 +11,7 @@ simply include the [adapter.min.js](https://github.com/devsrv/cachedfetch/blob/m
 
 ```javascript
 const config = {
-    mode: 'block',	            // support block | allow
+    mode: 'block',	//support block | allow
     matchIn: [
         'https://jsonplaceholder.typicode.com/posts/1'
     ],
@@ -19,9 +19,9 @@ const config = {
         '?postId=1',
         // '/posts'
     ],
-    defaultTTL: '5 day',	    // day | hour | minute | second
-    driver: 'sessionStorage',   // localStorage (default) | sessionStorage | AsyncStorage
-    disk: undefined			    // undefined | AsyncStorage
+    defaultTTL: '5 day',	// day | hour | minute | second
+    driver: 'sessionStorage', // localStorage (default) | sessionStorage | AsyncStorage
+    disk: undefined			// undefined | AsyncStorage
 };
 ```
 
@@ -49,6 +49,8 @@ headers.append('X-Requested-With', 'XMLHttpRequest');
 ```
 
 ```javascript
+import _initCachedFetch from './the-minified-adapter-file-above';	// alternative to including the bundled js as external script
+
 const cachedFetch = _initCachedFetch(config, headers);
 ```
 
